@@ -19,26 +19,17 @@ library(lme4)
 Prov.rate <- read.csv("FM_ProvisioningRateData_20200106.csv", header = T)
 
 Prov.rate$BirdID <- as.factor(Prov.rate$BirdID) 
-Prov.rate$Status <- as.factor(Prov.rate$Status)
 Prov.rate$Sex <- as.factor(Prov.rate$SexEstimate) # 1 = male
 Prov.rate$BGID <- as.factor(Prov.rate$BreedGroupID)
 Prov.rate$NWID <- as.factor(Prov.rate$NestWatchID)
 Prov.rate$NestID <- as.factor(Prov.rate$NestID)
-#Prov.rate$MateID <- as.factor(Prov.rate$Mate) 
 Prov.rate$WatchDate <- as.Date(Prov.rate$WatchDate, "%d/%m/%y")
 Prov.rate$Month<- as.factor(Prov.rate$Month)
 Prov.rate$Year<- as.factor(Prov.rate$Year)
-Prov.rate$HelperNo <- as.factor(Prov.rate$HelperNumber)
+Prov.rate$HelperNo <- as.factor(Prov.rate$HelperNumber) # as integer or factor???
 Prov.rate$Groupsize <- as.factor(Prov.rate$GroupSize)
-Prov.rate$Age <- as.integer(Prov.rate$Age)
-#age squared??? 
 Prov.rate$TerritoryID <- as.factor(Prov.rate$TerritoryID) 
-Prov.rate$TQ <- as.numeric(Prov.rate$TQ)
-Prov.rate$TQcorrected <- as.numeric(Prov.rate$TQcorrected)
-Prov.rate$ClutchSize <- as.integer(Prov.rate$ClutchSize)
-Prov.rate$BroodSize <- as.integer(Prov.rate$BroodSize)
 Prov.rate$NoChicks <- as.integer(Prov.rate$NoFledglings)
-Prov.rate$Obs <- as.factor(Prov.rate$Observer)
 Prov.rate$FPID <- as.factor(Prov.rate$FieldPeriodID)
 
 #mean centre variables 
