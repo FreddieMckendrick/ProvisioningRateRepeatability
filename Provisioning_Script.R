@@ -16,7 +16,7 @@ library(lme4)
 # 2 -  Load Dataset and tidy ####
 #data produced from query ""
 # In excel extract month and year from watch date into seperate columns
-Prov.rate <- read.csv("FM_ProvisioningRateData_20200106.csv", header = T)
+Prov.rate <- read.csv("FM_ProvisioningRate_20210114.csv", header = T)
 
 Prov.rate$BirdID <- as.factor(Prov.rate$BirdID) 
 Prov.rate$Sex <- as.factor(Prov.rate$SexEstimate) # 1 = male
@@ -32,32 +32,32 @@ Prov.rate$TerritoryID <- as.factor(Prov.rate$TerritoryID)
 Prov.rate$NoChicks <- as.integer(Prov.rate$NoFledglings)
 Prov.rate$FPID <- as.factor(Prov.rate$FieldPeriodID)
 
-#mean centre variables 
-#Prov.rate$Age.centred <- Prov.rate$Age-mean(Prov.rate$Age)
+#mean centre Age
+Prov.rate$Age.centred <- Prov.rate$Age-mean(Prov.rate$Age)
 
 #Provisioning rate data
 Prov.rate$ProvFeeds <- as.integer(Prov.rate$ProvisioningVisit)
-Prov.rate$ProvFeedsPerHour <- Prov.rate$ProvFeeds/(Prov.rate$ObsDuration/60) # Standardise Provsioning feeds to account for varying lenghts of nest watches
-Prov.rate$ProvFeedsPerHour <- round(Prov.rate$ProvFeedsPerHour) #round provisioning feeds to the nearest full number
+# Standardise Provsioning feeds to account for varying lenghts of nest watches
+Prov.rate$ProvFeedsPerHour <- Prov.rate$ProvFeeds/(Prov.rate$ObsDuration/60) 
+#round provisioning feeds to the nearest integer
+Prov.rate$ProvFeedsPerHour <- round(Prov.rate$ProvFeedsPerHour) 
 Prov.rate$ProvFeedsPerHour <- as.integer(Prov.rate$ProvFeedsPerHour)
 
-#apply a couple of standard transformation just in case
-Prov.rate$logFeedsPerHour <- log(Prov.rate$ProvFeedsPerHour)
-Prov.rate$sqrtFeedsPerHour <- sqrt(Prov.rate$ProvFeedsPerHour)
 
 #Remove NAs
 Prov.rate <- Prov.rate[complete.cases(Prov.rate),]
+
 #check layout and structure of data
-#if variables are not right go back and re run code 
 head(Prov.rate)
 str(Prov.rate) 
 
 #check variability in provisioning rate 
+#Does not seem to be any outliers
 hist(Prov.rate$ProvFeedsPerHour)
-hist(Prov.rate$logFeedsPerHour)
-hist(Prov.rate$sqrtFeedsPerHour)
 
 # 3  - Visualise data ####
+
+#This isn't really needed, just wanted to look at the relationship between Provisioning rate and fixed effects 
 
 #looking at provisioning rate and the number of helpers 
 ggplot(data = Prov.rate, aes(x = HelperNo, y = ProvFeedsPerHour, colour= Sex)) + geom_boxplot() + geom_point(position=position_dodge(width=0.75)) + theme_bw()
@@ -78,24 +78,15 @@ prior1<-list(R=list(V=1, nu=0.002),
              G = list(G1 = list(V = 1, nu = 0.002), 
                       G2 = list(V = 1, nu = 0.002)))
 
-#Close to inverse wishart (informative)
 
-prior2<-list(R=list(V=1, nu=0.2), 
-             G = list(G1 = list(V = 1, nu = 0.2), 
-                      G2 = list(V = 1, nu = 0.2)))
+#Expanded prior from HE/Tara
+#prior2<- list(R = list(V = 1, nu=0.002), G = list(G1 = list(V = 1,nu= 1,alpha.mu=0,alpha.V=1000), G2 = list(V = 1,nu= 1,alpha.mu=0,alpha.V=1000)))
 
-#Expanded prior
-prior3<- list(R = list(V = 1, nu=0.002), G = list(G1 = list(V = 1,nu= 1,alpha.mu=0,alpha.V=1000), 
-                                                  G2 = list(V = 1,nu= 1,alpha.mu=0,alpha.V=1000)))
-
-#Half Lotte, half cauchy
-prior4<- list(R = list(V = 1, nu=0.002), G = list(G1 = list(V = 1,nu= 0.002,alpha.mu=0,alpha.V=1000), 
-                                                  G2 = list(V=1, nu=1, alpha.mu = 0, alpha.V = 25^2)))
 
 # 5 - Running First Models ####
 
-model1 <-MCMCglmm(ProvFeedsPerHour ~ HelperNo + Sex + GroupSize + BroodSize + TQ + Age,
-                 random=~BirdID + NWID, nitt=200300, burnin=3000, thin=100, prior = prior2,
+model1 <-MCMCglmm(ProvFeedsPerHour ~ HelperNo + Sex + GroupSize + BroodSize + Age,
+                 random=~BirdID + NestID:NWID, nitt=200300, burnin=3000, thin=100,
                  verbose=TRUE, 
                  family="poisson", 
                  data=Prov.rate)
@@ -105,13 +96,16 @@ beep(sound=4)
 # 6 - Check diagnostics ####
 
 summary(model1)
+#HelperNo, Brood Size and Age all having an effect on provisioning rate 
 
-plot(model1$Sol)#Fixed effects (variance components)
+plot(model1$Sol)#Fixed effects (variance components) 
 plot(model1$VCV)#Random effects (variance components)
-
+#All Traces seem like that the model has worked well 
+#When ran with data from just 2010-2020 the model did not converge well with BirdID
+#When using data from 1995 model converges
 
 #Check for convergences
-#Passed? (all should pass)
+#HelperNo3 and GroupSize failed on Halfwidth
 heidel.diag(model1$Sol)
 heidel.diag(model1$VCV)
 
@@ -140,16 +134,41 @@ round(sort(effectiveSize(model1$VCV)))
 #Between individual variance Divided by total phenotypic variance (between individual variance + within individual variance).
 rep.Prov.rate <- (model1$VCV[, "BirdID"])/
   (model1$VCV[, "BirdID"]+
-     model1$VCV[,"NWID"] +
+     model1$VCV[,"NestID:NWID"] +
      model1$VCV[,"units"]+log(1/exp(model1$Sol[,"(Intercept)"])+1))
 
 #posterior.mode gives the repeatability score for provisioning rate
 posterior.mode(rep.Prov.rate) 
-# was 0.0918 first time ran with NWID:NestID
-#0.0871 with just NWID as other random effect
+#When I ran it with set prior I got an estimate of 0.119
+
 HPDinterval(rep.Prov.rate) 
-# 0.046-0.147 for NWID:NestID
-# 0.0519-0.153 for NWID as only other random
+# HPD Interval of 0.0685-0.184
+
+
+# Look at males and Females individually to see if repeatability varies between sexes ####
+
+#Subset data into two new data frames with males and females 
+Male.PR <- subset(Prov.rate, Sex == 1)
+Female.PR <- subset(Prov.rate, Sex ==0)
+
+#Remove any NAs
+Male.PR <- Male.PR[complete.cases(Male.PR),]
+Female.PR <- Female.PR[complete.cases(Female.PR),]
+
+#Run same model as before 
+#Males
+model2 <- MCMCglmm(ProvFeedsPerHour ~ HelperNo + GroupSize + BroodSize + Age,
+                     random=~BirdID + NestID:NWID, nitt=200300, burnin=3000, thin=100,
+                     verbose=TRUE, 
+                     family="poisson", 
+                     data=Male.PR)
+#Females
+model3 <- MCMCglmm(ProvFeedsPerHour ~ HelperNo + GroupSize + BroodSize + Age,
+                   random=~BirdID + NestID:NWID, nitt=200300, burnin=3000, thin=100,
+                   verbose=TRUE, 
+                   family="poisson", 
+                   data=Female.PR)
+
 
 
 # Non_bayesian Models ####
@@ -169,6 +188,6 @@ hist(Prov.rate$SqrtTQ)
 Prov.rate$LogTQ <- log(Prov.rate$TQ)
 Prov.rate$SqrtTQ <- sqrt(Prov.rate$TQ)
 
-model2 <- glmer(ProvFeedsPerHour ~ HelperNo + GroupSize + Sex + SqrtAge + BroodSize + SqrtTQ + (1|BirdID) + (1|NWID), family = poisson, data = Prov.rate)
+glmm1 <- glmer(ProvFeedsPerHour ~(1|BirdID) + (1|NWID), family = poisson, data = Prov.rate)
 summary(model2)
 
