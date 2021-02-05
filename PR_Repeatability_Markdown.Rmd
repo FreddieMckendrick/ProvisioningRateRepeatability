@@ -6,7 +6,7 @@ output: html_document
 ---
 
 
-# Load Packages needed in repeatability analysis -------------
+# Load Packages needed in repeatability analysis ------------
 
 ``` {r}
 
@@ -18,6 +18,7 @@ library(MCMCglmm)
 library(beepr)
 library(rptR)
 library(lme4)
+library(insight)
 library(parallel)
 library(readxl)
 library(lubridate)
@@ -29,7 +30,7 @@ library(lubridate)
 * Set columns to correct variable types 
 
 ```{r}
-Prov.rate <- read_csv("FM_ProvisioningRate_20210114.csv")
+Prov.rate <- read_csv("Data/FM_ProvisioningRate_20210114.csv")
 
 Prov.rate$BirdID <- as.factor(Prov.rate$BirdID) 
 Prov.rate$Status <- as.factor(Prov.rate$Status)
@@ -85,13 +86,13 @@ extra_NA # breakdown of where there are NAs
 
 #Remove 5 records
 #Records that have no Brood size are NWID 2480,2481 from Nest 4778
-#Record that has no observer 
+#Record that has no observer NWID =659
 Prov.rate <- Prov.rate %>% 
   filter( NestID != 4778) %>% 
   filter(NWID != 659)
 ```
 
-# Add NSA individuals into breed groups ----------------------
+# Add NSA individuals into breed groups ---------------------
 
 Only adding individuals assigned to single breed groups
 First Load data sets 
@@ -99,8 +100,8 @@ NSA_OneGroup = List of NSA individuals assinged to one breed group
 NSA_BGID = list of breed groups for all NSA individuals
 
 ```{r}
-NSA_OneGroup <- read_csv("FM_NSA_OneBG.csv")
-NSA_BGID <- read_csv("FM_NSA.csv")
+NSA_OneGroup <- read_csv("Data/FM_NSA_OneBG.csv")
+NSA_BGID <- read_csv("Data/FM_NSA.csv")
 ```
 
 Rename and set variables as correct format
@@ -158,15 +159,15 @@ Prov.rate <- Prov.rate %>%
 #Load Territory Quality data ----------------------
 
 Using Ellie and Sara's code 
-Need to replace missing territory qualities with mean from previous and following Territory qualities 
+Need to replace missing territory qualities with mean from previous and following field periods 
 Territory qualities are split into different field seasons to calculate average TQ
 
 ```{r}
 #load data
-TerritoryQuality_calc <- read_excel("sys_TerritoryQuality.xlsx")
-FPS_SummerIndex <- read_excel("AllFPS_SummerIndex.xlsx")
+TerritoryQuality_calc <- read_excel("Data/sys_TerritoryQuality.xlsx")
+FPS_SummerIndex <- read_excel("Data/AllFPS_SummerIndex.xlsx")
 
-#set as summer or winter
+#Set field periods as either summer or winter
 FPS_SummerIndex$Season <- NA
 FPS_SummerIndex$Season[FPS_SummerIndex$SummerIndex>=0.5] <- "Summer"
 FPS_SummerIndex$Season[FPS_SummerIndex$SummerIndex<0.5] <- "Winter"
@@ -175,7 +176,8 @@ FPS_SummerIndex$midpoint <- as.Date((FPS_SummerIndex$PeriodStart) +
 
 FPS_SummerIndex <- subset(FPS_SummerIndex, select = c("TerritoryID", "FieldPeriodID", "Season", "midpoint"))
 
-#link territory qualities to all Field periods and territories
+#Reduce territory quality data down to territory ID Field Period ID and the corrected Territory quality
+#Then Link to field period data to link TQ to summer or winter field periods 
 TerritoryQuality_calc <- unique(subset(TerritoryQuality_calc, select = c("TerritoryID", "FieldPeriodID", "TQcorrected"), Island=="CN"))
 TerritoryQuality_calc <- unique(merge(TerritoryQuality_calc, FPS_SummerIndex, by.x=c("TerritoryID", "FieldPeriodID"),
                                       by.y=c("TerritoryID", "FieldPeriodID"), 
@@ -189,7 +191,7 @@ colnames(TerritoryQuality_calc)[colnames(TerritoryQuality_calc) == 'TQcorrected'
 TerritoryQuality_calc$prevTQ <- TerritoryQuality_calc$TQ
 TerritoryQuality_calc$nextTQ <- TerritoryQuality_calc$TQ
 
-#Break up data set into summer and winter periods
+#Subset data into summer and winter field periods so that you can calculate Territory quality for missing data points
 TQ_winter <- subset(TerritoryQuality_calc, Season=="Winter")
 TQ_summer <- subset(TerritoryQuality_calc, Season=="Summer")
 
@@ -268,6 +270,15 @@ prior2 <- list(R = list(V = 1, nu = 0.002),
                         G2 = list(V = 1, nu = 1, alpha.mu = 0, alpha.V = 1000),
                         G3 = list(V = 1, nu = 1, alpha.mu = 0, alpha.V = 1000),
                         G4 = list(V = 1, nu = 1, alpha.mu = 0, alpha.V = 1000)))
+
+#could also use this one with nu closer to 0 as variances are quite small 
+#Similar to that set in Lottes paper 
+
+prior3 <- list(R = list(V = 1, nu = 0.002),
+               G = list(G1 = list(V = 1, nu = 0.002, alpha.mu = 0, alpha.V = 1000),
+                        G2 = list(V = 1, nu = 0.002, alpha.mu = 0, alpha.V = 1000),
+                        G3 = list(V = 1, nu = 0.002, alpha.mu = 0, alpha.V = 1000),
+                        G4 = list(V = 1, nu = 0.002, alpha.mu = 0, alpha.V = 1000)))
 ```
 
 
@@ -275,9 +286,9 @@ prior2 <- list(R = list(V = 1, nu = 0.002),
  
 Model ran with Biologically relevant fixed effects 
 Bird ID, Observer, Nest Id and Nest watch ID nested inside Nest ID ran as random effects 
-
+ 
 ```{r}
-Prov_rate_MCMC_model1 <-MCMCglmm(ProvFeedsPerHour ~ HelperNo + Sex + GroupSize + BroodSize + Age_centred + TQ_centred, random = ~BirdID + NestID + NestID:NWID + Observer, nitt=430000, burnin=30000, thin=200, prior = prior2, verbose = TRUE, family = "poisson",  data = Prov.rate)
+Prov_rate_MCMC_model1 <-MCMCglmm(ProvFeedsPerHour ~ HelperNo + Sex + GroupSize + BroodSize + Age_centred + TQ_centred, random = ~BirdID + NestID + NestID:NWID + Observer, nitt=650000, burnin=50000, thin=300, prior = prior2, verbose = TRUE, family = "poisson",  data = Prov.rate)
 ```
 
 Check Model Diagnostics 
@@ -310,7 +321,7 @@ Check convergence diagnostics
 Heidel/Welch diagnostic
 * All must pass 
 Geweke diagnostic
-* Checks similarity between first10% and last 50% 
+* Checks similarity between first 10% and last 50% 
 * All should be less than 2 
 
 ```{r}
@@ -338,7 +349,7 @@ Runs 4 models at once
 ```{r}
 GR.model <- mclapply(1:4, 
                      function(i) 
-                       {MCMCglmm(ProvFeedsPerHour ~ HelperNo + Sex + GroupSize + BroodSize + Age_centred + TQ_centred, random=~BirdID + NestID + NestID:NWID + Observer, prior = prior2, nitt=430000, burnin=30000, thin=200, verbose=TRUE, family="poisson",  data=Prov.rate)}, mc.cores=4)
+                       {MCMCglmm(ProvFeedsPerHour ~ HelperNo + Sex + GroupSize + BroodSize + Age_centred + TQ_centred, random=~BirdID + NestID + NestID:NWID + Observer, prior = prior2, nitt=650000, burnin=50000, thin=300, verbose=TRUE, family="poisson",  data=Prov.rate)}, mc.cores=4)
 
 GR.model <- lapply(GR.model, function(m) m$Sol)
 GR.model <- do.call(mcmc.list, GR.model)
@@ -361,10 +372,11 @@ plot(GR.model, ask=F, auto.layout=F)
 ```
 
 
-# Repeatability analysis -------------------------------------
+# Repeatability analysis ------------------------------------
 Calculate repeatability from variance components of random and fixed effects 
 Repeatability calculate by dividing the between individual variance by the total phenotypic variance 
 Calculate score using the posterior mode and the confidence interval
+When I ran the model it gave repeatability of 0.965 (0.563-0.161)
 
 ```{r}
 rep.Prov.rate <- (Prov_rate_MCMC_model1$VCV[, "BirdID"])/ (Prov_rate_MCMC_model1$VCV[, "BirdID"]+ Prov_rate_MCMC_model1$VCV[,"NestID:NWID"] + Prov_rate_MCMC_model1$VCV[,"Observer"] + Prov_rate_MCMC_model1$VCV[,"units"]+log(1/exp(Prov_rate_MCMC_model1$Sol[,"(Intercept)"])+1))
@@ -375,7 +387,7 @@ HPDinterval(rep.Prov.rate)
 ```
 
 
-# Running Non-Bayesian models --------------------------------
+# Running Non-Bayesian models -------------------------------
 
 Run same model in lme4 to see if the prior is suitable and produces similar variances for the fixed effects
 Should give similar repeatability score
@@ -407,6 +419,7 @@ variance_components <- get_variance(Prov_Rate_glmer_model2)
 Get repeatability score of provisioning rate from glmer 
 Must extract fixed effects so can use intercept estimate
 Then calculate repeatability as done previously 
+Repeatability score of 0.0954
 
 ```{r}
 glmer_fixed <- as.numeric(fixef(Prov_Rate_glmer_model2))
@@ -417,7 +430,7 @@ glmer_fixed_estimates <- tibble(glmer_fixed, FE_names) %>%
 glmer_repeatability <- (variance_components$var.intercept["BirdID"])/(variance_components$var.random + variance_components$var.residual + log(1/exp(glmer_fixed_estimates$glmer_fixed)+1))
 
 
-glmer_repeatability #very similar to that produced by MCMCglmm
+glmer_repeatability #similar to that produced by MCMCglmm
 ```
 
 Running rptR model

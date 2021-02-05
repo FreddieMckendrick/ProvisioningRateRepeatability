@@ -21,7 +21,7 @@ library(lubridate)
 # 2 -  Load Dataset and tidy ####
 #data produced from query ""
 # In excel extract month and year from watch date into separate columns
-Prov.rate <- read_csv("FM_ProvisioningRate_20210114.csv")
+Prov.rate <- read_csv("Data/FM_ProvisioningRate_20210114.csv")
 
 Prov.rate$BirdID <- as.factor(Prov.rate$BirdID) 
 Prov.rate$Status <- as.factor(Prov.rate$Status)
@@ -79,7 +79,7 @@ hist(Prov.rate$ProvFeedsPerHour)
 
 #Add data of individuals with only one breed group
 #change Field period and BirdID to factors
-NSA_OneGroup <- read_csv("FM_NSA_OneBG.csv")
+NSA_OneGroup <- read_csv("Data/FM_NSA_OneBG.csv")
 NSA_OneGroup
 NSA_OneGroup$FieldPeriodID <- as.factor(NSA_OneGroup$FieldPeriodID)
 NSA_OneGroup <- NSA_OneGroup %>% 
@@ -87,7 +87,7 @@ NSA_OneGroup <- NSA_OneGroup %>%
 NSA_OneGroup$BirdID <- as.factor(NSA_OneGroup$BirdID)
 
 #Add data of breed groups of individual birds
-NSA_BGID <- read_csv("FM_NSA.csv")
+NSA_BGID <- read_csv("Data/FM_NSA.csv")
 NSA_BGID
 NSA_BGID$FieldPeriodID <- as.factor(NSA_BGID$FieldPeriodID)
 NSA_BGID <- NSA_BGID %>% 
@@ -135,8 +135,8 @@ Prov.rate <- Prov.rate %>%
 # Add Territory Quality  ----------------------------------
 
 #Load in datasets
-TerritoryQuality_calc <- read_excel("sys_TerritoryQuality.xlsx")
-FPS_SummerIndex <- read_excel("AllFPS_SummerIndex.xlsx")
+TerritoryQuality_calc <- read_excel("Data/sys_TerritoryQuality.xlsx")
+FPS_SummerIndex <- read_excel("Data/AllFPS_SummerIndex.xlsx")
 
 # Territory quality: fixing missing datapoints 
 
@@ -283,9 +283,7 @@ beep(sound=4)
 Prov_rate_MCMC_model2 <-MCMCglmm(ProvFeedsPerHour ~ HelperNo + Sex + GroupSize + BroodSize + Age_centred + TQ_centred, random = ~BirdID + NestID + NestID:NWID + Observer, nitt=650000, burnin=50000, thin=300, prior = prior3, verbose = TRUE, family = "poisson",  data = Prov.rate)
 beep(sound=4)
 
-#run model without NWID nested to double check that the model is running
-model2_NoNWID <- MCMCglmm(ProvFeedsPerHour ~ HelperNo + Sex + GroupSize + BroodSize + Age.centred + TQ_centred, random=~BirdID + NestID + Observer, nitt=630000, burnin=30000, thin=300, verbose=TRUE, family="poisson",  data=Prov.rate)
-beep(sound=4)
+
 #Produced different post.means and variances so it looks like NWID nested within side is effecting the results 
 
 # 6 - Check diagnostics ####
@@ -365,7 +363,7 @@ NWatches<- length(unique(Prov.rate$NWID))
 #not expected to happen by chance but only when data constraining to certain values 
 GR.model <- mclapply(1:4, 
                      function(i) 
-                       {MCMCglmm(ProvFeedsPerHour ~ HelperNo + Sex + GroupSize + BroodSize + Age_centred + TQ_centred, random=~BirdID + NestID + NestID:NWID + Observer, prior = prior2, nitt=430000, burnin=30000, thin=200, verbose=TRUE, family="poisson",  data=Prov.rate)}, mc.cores=4)
+                       {MCMCglmm(ProvFeedsPerHour ~ HelperNo + Sex + GroupSize + BroodSize + Age_centred + TQ_centred, random=~BirdID + NestID + NestID:NWID + Observer, prior = prior2, nitt=650000, burnin=50000, thin=300, verbose=TRUE, family="poisson",  data=Prov.rate)}, mc.cores=4)
 
 GR.model <- lapply(GR.model, function(m) m$Sol)
 GR.model <- do.call(mcmc.list, GR.model)
