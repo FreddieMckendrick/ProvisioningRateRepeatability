@@ -8,7 +8,7 @@ output: html_document
 
 # Load Packages needed in repeatability analysis ------------
 
-``` {r}
+``` {r load_packages, message = FALSE}
 
 library(tidyverse)
 library(Matrix)
@@ -22,6 +22,7 @@ library(insight)
 library(parallel)
 library(readxl)
 library(lubridate)
+library(magrittr)
 ```
 
 
@@ -29,7 +30,7 @@ library(lubridate)
 * Load dataset
 * Set columns to correct variable types 
 
-```{r}
+```{r Load_dataset, message = FALSE}
 Prov.rate <- read_csv("Data/FM_ProvisioningRate_20210114.csv")
 
 Prov.rate$BirdID <- as.factor(Prov.rate$BirdID) 
@@ -44,13 +45,12 @@ Prov.rate$Year<- as.factor(Prov.rate$Year)
 Prov.rate$HelperNo <- as.integer(Prov.rate$HelperNumber) 
 Prov.rate$GroupSize <- as.integer(Prov.rate$GroupSize)
 Prov.rate$TerritoryID <- as.factor(Prov.rate$TerritoryID) 
-Prov.rate$NoChicks <- as.integer(Prov.rate$NoFledglings)
 Prov.rate$FPID <- as.factor(Prov.rate$FieldPeriodID)
 ```
 
 Mean Centre age and divide by 2 standard deviations as in HE 2017 paper
 
-```{r}
+```{r Mean_centre_Age}
 Prov.rate$Age_centred <- Prov.rate$Age-mean(Prov.rate$Age)
 Age_sd <- sd(Prov.rate$Age)
 Age_Two_sd <- 2*Age_sd
@@ -59,13 +59,25 @@ Prov.rate$Age_centred <- Prov.rate$Age_centred / Age_Two_sd
 
 Standardise Provisioning rate data to feeds per hour to account for variation in the duration in nest watches 
 
-```{r}
+```{r Standardise_Provisioning}
 Prov.rate$ProvFeeds <- as.integer(Prov.rate$ProvisioningVisit)
 Prov.rate$ProvFeedsPerHour <- Prov.rate$ProvFeeds/(Prov.rate$ObsDuration/60) 
 #round provisioning feeds to the nearest integer
 Prov.rate$ProvFeedsPerHour <- round(Prov.rate$ProvFeedsPerHour) 
 Prov.rate$ProvFeedsPerHour <- as.integer(Prov.rate$ProvFeedsPerHour)
 ```
+
+Set helper number as Y/N
+No helpers = 0, helpers = 1 
+
+```{r}
+Prov.rate %<>% 
+  mutate(HelperYN = 
+           case_when(HelperNo == 0 ~ "0",
+                     HelperNo >= 1 ~ "1")
+         )
+```
+
 
 # Identify NA records -----------------------
 Identify if there are any NAs in the dataset and if they need to be removed
@@ -76,7 +88,7 @@ Identify if there are any NAs in the dataset and if they need to be removed
 *Remaining Twenty-nine records do not have number of fledglings
 
 Need to remove records with no brood size (NWID = 2480, 2481) and no Observer
-```{r}
+```{r Remove_NAs}
 NA_Values <- Prov.rate %>%  filter_all(any_vars(is.na(.)))
 Prov.rate %>% 
     select_if(function(x) any(is.na(x))) %>% 
@@ -87,7 +99,7 @@ extra_NA # breakdown of where there are NAs
 #Remove 5 records
 #Records that have no Brood size are NWID 2480,2481 from Nest 4778
 #Record that has no observer NWID =659
-Prov.rate <- Prov.rate %>% 
+Prov.rate %<>% 
   filter( NestID != 4778) %>% 
   filter(NWID != 659)
 ```
@@ -99,32 +111,32 @@ First Load data sets
 NSA_OneGroup = List of NSA individuals assinged to one breed group
 NSA_BGID = list of breed groups for all NSA individuals
 
-```{r}
+```{r Load_NSA}
 NSA_OneGroup <- read_csv("Data/FM_NSA_OneBG.csv")
 NSA_BGID <- read_csv("Data/FM_NSA.csv")
 ```
 
 Rename and set variables as correct format
 
-```{r}
+```{r Rename_NSA}
 NSA_OneGroup$FieldPeriodID <- as.factor(NSA_OneGroup$FieldPeriodID)
-NSA_OneGroup <- NSA_OneGroup %>% 
+NSA_OneGroup %<>% 
   dplyr::rename(FPID = FieldPeriodID)
 NSA_OneGroup$BirdID <- as.factor(NSA_OneGroup$BirdID)
 
 NSA_BGID$FieldPeriodID <- as.factor(NSA_BGID$FieldPeriodID)
-NSA_BGID <- NSA_BGID %>% 
+NSA_BGID %<>% 
   dplyr::rename(FPID = FieldPeriodID)
 NSA_BGID$BirdID <- as.factor(NSA_BGID$BirdID)
-NSA_BGID <- NSA_BGID %>% 
+NSA_BGID %<>% 
   dplyr::select(-(NSA_Birds))
 ```
 
 Join tables together so that you have BirdID, Field Period ID, Breed Group ID and Territory ID all in one tibble 
 
-```{r}
-NSA_OneGroup <- NSA_OneGroup %>% left_join(NSA_BGID)
-NSA_OneGroup <- NSA_OneGroup %>% 
+```{r Join_NSA_Tables}
+NSA_OneGroup %<>% left_join(NSA_BGID)
+NSA_OneGroup %<>% 
   dplyr::rename(BGID = BreedGroupID)
 NSA_OneGroup$BGID <- as.factor(NSA_OneGroup$BGID)
 ```
@@ -133,7 +145,7 @@ Count the number of NSA individuals within a breed group per field period, set i
 * There are eight groups with 2 NSA in a Field Period
 * Two Groups with three NSA in a Field Period 
 
-```{r}
+```{r Count_NSA}
 NumberOfBirds <- NSA_OneGroup %>%
   dplyr::count(FPID, BGID, TerritoryNumber)
 NumberOfBirds$BGID <- as.factor(NumberOfBirds$BGID) 
@@ -145,24 +157,24 @@ Change NA rows in NSA.individuals column to 0
 * these represent Breed Groups with no NSA individuals 
 Add the number of NSA individuals on to Group Size 
 
-```{r}
-Prov.rate <- Prov.rate %>% left_join(NumberOfBirds) #join data sets
-Prov.rate <- Prov.rate %>% 
+```{r Join_NSA_Provisioning}
+Prov.rate %<>% left_join(NumberOfBirds) #join data sets
+Prov.rate %<>% 
   dplyr::rename(NSA.Individuals = n) #rename count of NSA individual column
-Prov.rate <- Prov.rate %>% 
+Prov.rate %<>% 
   dplyr::mutate_at(dplyr::vars(NSA.Individuals), ~tidyr::replace_na(.,0)) #Replace NA rows with 0
-Prov.rate <- Prov.rate %>% 
+Prov.rate %<>% 
   dplyr::mutate(GroupSize = GroupSize + NSA.Individuals) #add NSA individuals to GroupSize
 ```
 
 
-#Load Territory Quality data ----------------------
+# Load Territory Quality data ----------------------
 
 Using Ellie and Sara's code 
 Need to replace missing territory qualities with mean from previous and following field periods 
 Territory qualities are split into different field seasons to calculate average TQ
 
-```{r}
+```{r Territory_Quality}
 #load data
 TerritoryQuality_calc <- read_excel("Data/sys_TerritoryQuality.xlsx")
 FPS_SummerIndex <- read_excel("Data/AllFPS_SummerIndex.xlsx")
@@ -183,7 +195,7 @@ TerritoryQuality_calc <- unique(merge(TerritoryQuality_calc, FPS_SummerIndex, by
                                       by.y=c("TerritoryID", "FieldPeriodID"), 
                                       all.x = TRUE,
                                       all.y = TRUE))
-TerritoryQuality_calc <- TerritoryQuality_calc %>%
+TerritoryQuality_calc %<>%
   arrange(TerritoryID, midpoint) %>%
   group_by(TerritoryID) 
 
@@ -198,11 +210,11 @@ TQ_summer <- subset(TerritoryQuality_calc, Season=="Summer")
 #calculate mean TQ for missing rows
 #winter
 #Print the value of the most recent field period before current NA
-TQ_winter <- TQ_winter %>% 
+TQ_winter %<>% 
   group_by(TerritoryID) %>% 
   tidyr::fill(prevTQ, .direction='updown')
 #Print the value of the most recent field period after current NA
-TQ_winter <- TQ_winter %>% 
+TQ_winter %<>% 
   group_by(TerritoryID) %>% 
   tidyr::fill(nextTQ, .direction='downup')
 #Calculate mean of prev and next TQs 
@@ -210,11 +222,11 @@ TQ_winter$TQ <- (TQ_winter$prevTQ + TQ_winter$nextTQ)/2
 
 #summer
 #Print the value of the most recent field period before current NA
-TQ_summer <- TQ_summer %>% 
+TQ_summer %<>% 
   group_by(TerritoryID) %>% 
   tidyr::fill(prevTQ, .direction='updown')
 #Print the value of the most recent field period after current NA
-TQ_summer <- TQ_summer %>% 
+TQ_summer %<>% 
   group_by(TerritoryID) %>% 
   tidyr::fill(nextTQ, .direction='downup')
 #Calculate mean of prev and next TQs 
@@ -225,7 +237,7 @@ TQ <- rbind(TQ_summer, TQ_winter)
 
 #Refine dataset and change variables so that it matches Provisioning data
 TQ <- subset(TQ, select = c("TerritoryID", "FieldPeriodID", "TQ"))
-TQ <- TQ %>% 
+TQ %<>% 
   dplyr::rename(FPID = FieldPeriodID)
 TQ$FPID <- as.factor(TQ$FPID)
 TQ$TerritoryID <- as.factor(TQ$TerritoryID)
@@ -241,19 +253,33 @@ TQ_Two_sd <- 2*TQ_sd
 Prov.rate$TQ_centred <- Prov.rate$TQ_centred / TQ_Two_sd
 ```
 
-#Set Prov.rate as dataframe -----------------------
+
+# Set Prov.rate as dataframe -----------------------
 MCMC didn't really like me running it as a tibble
 
-```{r}
+```{r Set_Provisioning_DF}
 Prov.rate <- as.data.frame(Prov.rate)
+str(Prov.rate)
 ```
+
+# Create Visuals of Fixed Effects ------------
+
+First look at helper number
+Looks like increasing helper number might reduce provisioning rate but very small sample size for 3 helpers may effect this 
+Will set Helper number as Y/N
+```{r Plot_Helper_Number}
+
+ggplot(data = Prov.rate, aes(x = HelperNo, y = ProvFeedsPerHour, group = HelperNo)) + geom_boxplot() + geom_point(position=position_dodge(width=0.75)) + theme_bw()
+```
+
+
 
 # Setting Priors ----------------------
 
 prior1 is a inverse-wishart that should be the same as the default for MCMCglmm
 prior2 is a simple expanded parameter prior with large covariance matrix
-
-```{r}
+prior3 is a expanded parameter prior similar to that used in lotte provisioning paper
+```{r Set_Priors}
 #non-informative prior that should be same as default
 #Predicts that the posterior distribution is not different from 0 
 #Four levels of G for four random effects
@@ -282,12 +308,12 @@ prior3 <- list(R = list(V = 1, nu = 0.002),
 ```
 
 
-#Run MCMC model and check diagnostics --------------------
+# Run MCMC model and check diagnostics --------------------
  
 Model ran with Biologically relevant fixed effects 
 Bird ID, Observer, Nest Id and Nest watch ID nested inside Nest ID ran as random effects 
  
-```{r}
+```{r Run_MCMC_model_1, message=FALSE}
 Prov_rate_MCMC_model1 <-MCMCglmm(ProvFeedsPerHour ~ HelperNo + Sex + GroupSize + BroodSize + Age_centred + TQ_centred, random = ~BirdID + NestID + NestID:NWID + Observer, nitt=650000, burnin=50000, thin=300, prior = prior2, verbose = TRUE, family = "poisson",  data = Prov.rate)
 ```
 
@@ -295,7 +321,7 @@ Check Model Diagnostics
 First, see summary
 Shows that Helper Number, Brood size and Age all have significant effects on provisioning rate
 Confidence intervals for Sex, Group Size and Territory Quality all overlap 0 
-```{r}
+```{r Summary_Model_1}
 summary(Prov_rate_MCMC_model1)
 ```
 
@@ -303,8 +329,8 @@ summary(Prov_rate_MCMC_model1)
 Check effective sample size of model
 The number of iterations should be as close to 2000 as possible 
 All are between 1000-2000
-Some random effects are lower end so possibly could run for longer
-```{r}
+Some random effects are at lower end so possibly could run for longer
+```{r SampleSize_Model1}
 round(sort(effectiveSize(Prov_rate_MCMC_model1$Sol)))
 round(sort(effectiveSize(Prov_rate_MCMC_model1$VCV)))
 ```
@@ -312,7 +338,7 @@ round(sort(effectiveSize(Prov_rate_MCMC_model1$VCV)))
 
 Produce Summary plots to assess model convergence
 All look like they have converged
-```{r}
+```{r Summary_Plots_MCMC_Model1, fig.height=10, fig.width=10}
 plot(Prov_rate_MCMC_model1$Sol)
 plot(Prov_rate_MCMC_model1$VCV)
 ```
@@ -324,7 +350,7 @@ Geweke diagnostic
 * Checks similarity between first 10% and last 50% 
 * All should be less than 2 
 
-```{r}
+```{r Model_Diagnostics_MCMC_Model1}
 heidel.diag(Prov_rate_MCMC_model1$Sol)
 heidel.diag(Prov_rate_MCMC_model1$VCV)
 
@@ -336,17 +362,17 @@ Check for autocorrelation
 If autocorrelation is high then need more thinning 
 Autocorrelation is low for all fixed and random effects
 None are greater than 0.1
-```{r}
+```{r Autocorrelation_MCMC_Model1}
 autocorr(Prov_rate_MCMC_model1$Sol)
 autocorr(Prov_rate_MCMC_model1$VCV)
 ```
 
-#Gelman-Rubin diagnostics -----------------------------------
+# Gelman-Rubin diagnostics -----------------------------------
 G-R checks whether multiple chains converge on the same posterior distribution
 This is not meant to happen by chance but only when data is constraining to certian values 
 Runs 4 models at once 
 
-```{r}
+```{r GelmanRubin_MCMC_Model1, eval=FALSE, include=FALSE}
 GR.model <- mclapply(1:4, 
                      function(i) 
                        {MCMCglmm(ProvFeedsPerHour ~ HelperNo + Sex + GroupSize + BroodSize + Age_centred + TQ_centred, random=~BirdID + NestID + NestID:NWID + Observer, prior = prior2, nitt=650000, burnin=50000, thin=300, verbose=TRUE, family="poisson",  data=Prov.rate)}, mc.cores=4)
@@ -361,7 +387,7 @@ Plotting the models can identify when the models converge
 Plots the scale reduction factors
 The closer to one the better the convergence 
 
-```{r}
+```{r GelmanRubinPlots, eval=FALSE, include=FALSE}
 par(mfrow=c(4,2), mar = c(2,2,1,2))
 gelman.plot(GR.model, auto.layout = F)
 par(mfrow=c(4,2), mar=c(2,2,1,2))
@@ -378,7 +404,7 @@ Repeatability calculate by dividing the between individual variance by the total
 Calculate score using the posterior mode and the confidence interval
 When I ran the model it gave repeatability of 0.965 (0.563-0.161)
 
-```{r}
+```{r MCMC_Repeatability}
 rep.Prov.rate <- (Prov_rate_MCMC_model1$VCV[, "BirdID"])/ (Prov_rate_MCMC_model1$VCV[, "BirdID"]+ Prov_rate_MCMC_model1$VCV[,"NestID:NWID"] + Prov_rate_MCMC_model1$VCV[,"Observer"] + Prov_rate_MCMC_model1$VCV[,"units"]+log(1/exp(Prov_rate_MCMC_model1$Sol[,"(Intercept)"])+1))
 
 posterior.mode(rep.Prov.rate) 
@@ -392,7 +418,7 @@ HPDinterval(rep.Prov.rate)
 Run same model in lme4 to see if the prior is suitable and produces similar variances for the fixed effects
 Should give similar repeatability score
 
-```{r}
+```{r glmer_model1}
 Prov_Rate_glmer_model1 <- glmer(ProvFeedsPerHour ~ HelperNo + Sex + GroupSize + BroodSize + Age_centred + TQ_centred + (1|BirdID) + (1|NestID) + (1|NestID:NWID) + (1|Observer), family = poisson, data = Prov.rate)
 
 summary(Prov_Rate_glmer_model1) #model does not converge
@@ -402,7 +428,7 @@ The model does not converge
 Increase the number of iterations as outlined in 
 https://rstudio-pubs-static.s3.amazonaws.com/33653_57fc7b8e5d484c909b615d8633c01d51.html
 
-```{r}
+```{r glmer_model2}
 ss <- getME(Prov_Rate_glmer_model1, c("theta", "fixef"))
 Prov_Rate_glmer_model2 <- update(Prov_Rate_glmer_model1, start = ss, control = glmerControl(optCtrl = list(maxfun=2e4)))  
     
@@ -412,8 +438,9 @@ summary(Prov_Rate_glmer_model2) #model now converges
 Extract variance components 
 Variance components are similar but not the same as those produced by MCMCglmm
 
-```{r}
+```{r glmer_variance}
 variance_components <- get_variance(Prov_Rate_glmer_model2)
+variance_components
 ```
 
 Get repeatability score of provisioning rate from glmer 
@@ -421,7 +448,7 @@ Must extract fixed effects so can use intercept estimate
 Then calculate repeatability as done previously 
 Repeatability score of 0.0954
 
-```{r}
+```{r glmer_repeatability}
 glmer_fixed <- as.numeric(fixef(Prov_Rate_glmer_model2))
 FE_names <- c("Intercept", "HelperNo", "Sex", "GroupSize", "BroodSize", "Age", "TQ")
 glmer_fixed_estimates <- tibble(glmer_fixed, FE_names) %>% 
@@ -438,8 +465,8 @@ You dont really need to do this
 Has major convergence problems 
 Gives repeatability score a little smaller then previous 
 
-```{r}
-rptPoisson(ProvFeedsPerHour ~ HelperNo + Sex + GroupSize + BroodSize + Age_centred + TQ_centred + (1|BirdID) + (1|NestID) + (1|NestID:NWID) + (1|Observer), grname = "BirdID", data = Prov.rate, nboot = 1000, npermut = 1000)
+```{r rptR}
+rptPoisson(ProvFeedsPerHour ~ HelperNo + Sex + GroupSize + BroodSize + Age_centred + TQ_centred + (1|BirdID) + (1|NestID) + (1|NestID:NWID) + (1|Observer), grname = "BirdID", data = Prov.rate, nboot = 0, npermut = 0)
 ```
 
 
@@ -448,7 +475,7 @@ rptPoisson(ProvFeedsPerHour ~ HelperNo + Sex + GroupSize + BroodSize + Age_centr
 Must extract posterior modes and HPD intervals from MCMCglmm model 
 Change names and reorder variables so it is displayed nicer
 
-```{r}
+```{r Fixed_Effects_For_Plot}
 FixedEffects <- data.frame(posterior.mode(Prov_rate_MCMC_model1$Sol), HPDinterval(Prov_rate_MCMC_model1$Sol))
 FixedEffects <- tibble::rownames_to_column(FixedEffects, "term")
 FixedEffects <- rename(FixedEffects, estimate = posterior.mode.Prov_rate_MCMC_model1.Sol.)
@@ -469,7 +496,7 @@ FixedEffects$term <- factor(FixedEffects$term, level = c('(Intercept)', 'Number 
 ```
 
 Plot Fixed effects
-```{r}
+```{r Plot_Fixed_Effects}
 FixedEffects %>%
   ggplot(aes(y = term, x = estimate)) +
   theme_bw() +

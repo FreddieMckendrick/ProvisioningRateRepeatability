@@ -1,0 +1,70 @@
+---
+title: "README"
+author: "Freddie Mckendrick"
+date: "10/02/2021"
+output: html_document
+---
+
+I have tried to contain any information about what is in each file within this R project here 
+
+The objective of this project is to quantify the repeatability of provisioning rate in the Seychelles warbler
+All files and analysis are saved in the GitHub repository
+https://github.com/FreddieMckendrick/ProvisioningRateRepeatability.git
+Folder names and contents are outlined below 
+
+Access_queries 
+* Word ducements containing SQL code for the extraction of the required data from the Seychelles warbler data base
+* Documents give both the SQL code and instructions for how the data should be extracted and what queries should be saved as 
+
+Data
+* Contains five different datasets
+* These include the provisioning data, two files for Not seen but alive individuals (NSA) and two files used to calculate territory quality extracted from the database by Ellie Chesterton
+* These data sets are imported into the script as tibbles 
+
+Figures
+* Contains PDF and Image outputs of all figures to be used in thesis 
+* Repeatability estimates
+* Parameter estimates for fixed effects within Model
+
+Outputs 
+* Includes any saved model outputs and processed data sets that were filtered and used within the analysis 
+
+Reports
+* Includes R Markdown files 
+
+
+The versions of each package used in the analysis are outlined below 
+
+```{r}
+library(tidyverse)
+library(Matrix)
+library(coda)
+library(ape)
+library(MCMCglmm)
+library(beepr)
+library(rptR)
+library(lme4)
+library(insight)
+library(parallel)
+library(readxl)
+library(lubridate)
+library(magrittr)
+```
+
+```{r}
+packageVersion("tidyverse")
+packageVersion("Matrix")
+packageVersion("coda")
+packageVersion("ape")
+packageVersion("MCMCglmm")
+packageVersion("beepr")
+packageVersion("rptR")
+packageVersion("lme4")
+packageVersion("insight")
+packageVersion("parallel")
+packageVersion("readxl")
+packageVersion("lubridate")
+packageVersion("magrittr")
+
+```
+
